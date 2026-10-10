@@ -1,0 +1,13 @@
+
+# Biblioteca Escolar EFT
+# Configuracion de ejemplo para MySQL
+#
+# Copiar este archivo como db.properties
+# antes de ejecutar la aplicacion.
+#
+# Modificar el puerto, usuario y contrasena
+# segun la instalacion local de MySQL.
+
+db.url=jdbc:mysql://127.0.0.1:3306/biblioteca
+db.user=root
+db.password=
