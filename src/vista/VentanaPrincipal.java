@@ -6,17 +6,32 @@ import model.Usuario;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.util.ArrayList;
+import java.util.List;
 
 public class VentanaPrincipal extends JFrame {
 
+    private final List<JFrame> ventanasAbiertas = new ArrayList<>();
+
     public VentanaPrincipal(Usuario usuario) {
 
+        boolean esBibliotecario =
+                "bibliotecario".equalsIgnoreCase(usuario.getRol());
+
         setTitle("Sistema de Biblioteca Escolar");
-        setSize(750, 550);
+
+        setSize(
+                esBibliotecario ? 650 : 600,
+                esBibliotecario ? 500 : 410
+        );
+
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
         JPanel panel = new JPanel(new BorderLayout(15, 15));
+
         panel.setBorder(
                 BorderFactory.createEmptyBorder(25, 25, 25, 25)
         );
@@ -35,13 +50,12 @@ public class VentanaPrincipal extends JFrame {
                 SwingConstants.CENTER
         );
 
-        JPanel centro = new JPanel(new GridLayout(0, 1, 10, 10));
+        JPanel centro = new JPanel(
+                new GridLayout(0, 1, 10, 10)
+        );
 
         centro.add(bienvenida);
         centro.add(rol);
-
-        boolean esBibliotecario =
-                "bibliotecario".equalsIgnoreCase(usuario.getRol());
 
         if (esBibliotecario) {
 
@@ -49,8 +63,8 @@ public class VentanaPrincipal extends JFrame {
                     "Gestionar categorías"
             );
 
-            botonCategorias.addActionListener(_ ->
-                    new VentanaCategorias(usuario).setVisible(true)
+            botonCategorias.addActionListener(evento ->
+                    abrirVentana(new VentanaCategorias(usuario))
             );
 
             centro.add(botonCategorias);
@@ -59,19 +73,21 @@ public class VentanaPrincipal extends JFrame {
                     "Gestionar estudiantes"
             );
 
-            botonEstudiantes.addActionListener(_ ->
-                    new VentanaEstudiantes(usuario).setVisible(true)
+            botonEstudiantes.addActionListener(evento ->
+                    abrirVentana(new VentanaEstudiantes(usuario))
             );
 
             centro.add(botonEstudiantes);
         }
 
         JButton botonLibros = new JButton(
-                esBibliotecario ? "Gestionar libros" : "Consultar libros"
+                esBibliotecario
+                        ? "Gestionar libros"
+                        : "Consultar libros"
         );
 
-        botonLibros.addActionListener(_ ->
-                new VentanaLibros(usuario).setVisible(true)
+        botonLibros.addActionListener(evento ->
+                abrirVentana(new VentanaLibros(usuario))
         );
 
         centro.add(botonLibros);
@@ -80,34 +96,64 @@ public class VentanaPrincipal extends JFrame {
                 "Préstamos y devoluciones"
         );
 
-        botonPrestamos.addActionListener(_ ->
-                new VentanaPrestamos(usuario).setVisible(true)
+        botonPrestamos.addActionListener(evento ->
+                abrirVentana(new VentanaPrestamos(usuario))
         );
 
         centro.add(botonPrestamos);
 
         JButton botonReportes = new JButton(
-                esBibliotecario ? "Reportes" : "Mi historial"
+                esBibliotecario
+                        ? "Reportes"
+                        : "Mi historial"
         );
 
-        botonReportes.addActionListener(_ ->
-                new VentanaReportes(usuario).setVisible(true)
+        botonReportes.addActionListener(evento ->
+                abrirVentana(new VentanaReportes(usuario))
         );
 
         centro.add(botonReportes);
 
         JButton botonSalir = new JButton("Cerrar sesión");
 
-        botonSalir.addActionListener(_ -> {
-            dispose();
-            new VentanaLogin().setVisible(true);
-        });
+        botonSalir.addActionListener(evento -> cerrarSesion());
 
         panel.add(titulo, BorderLayout.NORTH);
         panel.add(centro, BorderLayout.CENTER);
         panel.add(botonSalir, BorderLayout.SOUTH);
 
         add(panel);
+    }
+
+    private void abrirVentana(JFrame ventana) {
+
+        ventanasAbiertas.add(ventana);
+
+        ventana.addWindowListener(new WindowAdapter() {
+
+            @Override
+            public void windowClosed(WindowEvent evento) {
+
+                ventanasAbiertas.remove(ventana);
+            }
+        });
+
+        ventana.setVisible(true);
+    }
+
+    private void cerrarSesion() {
+
+        for (JFrame ventana :
+                new ArrayList<>(ventanasAbiertas)) {
+
+            ventana.dispose();
+        }
+
+        ventanasAbiertas.clear();
+
+        dispose();
+
+        new VentanaLogin().setVisible(true);
     }
 
     private JLabel crearBienvenida(Persona persona) {

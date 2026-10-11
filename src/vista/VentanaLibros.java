@@ -13,8 +13,13 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class VentanaLibros extends JFrame {
+
+    private static final Logger LOGGER =
+            Logger.getLogger(VentanaLibros.class.getName());
 
     private final ControladorLibro controlador;
     private final List<Categoria> categorias = new ArrayList<>();
@@ -75,8 +80,8 @@ public class VentanaLibros extends JFrame {
         tabla.setRowHeight(25);
 
         if (esBibliotecario) {
-            tabla.getSelectionModel().addListSelectionListener(e -> {
-                if (!e.getValueIsAdjusting()) {
+            tabla.getSelectionModel().addListSelectionListener(evento -> {
+                if (!evento.getValueIsAdjusting()) {
                     seleccionarLibro();
                 }
             });
@@ -133,19 +138,26 @@ public class VentanaLibros extends JFrame {
 
         add(panel);
 
-        botonGuardar.addActionListener(_ -> guardar());
-        botonModificar.addActionListener(_ -> modificar());
-        botonEliminar.addActionListener(_ -> eliminar());
-        botonLimpiar.addActionListener(_ -> limpiar());
-        botonActualizar.addActionListener(_ -> cargarDatos());
+        botonGuardar.addActionListener(evento -> guardar());
+        botonModificar.addActionListener(evento -> modificar());
+        botonEliminar.addActionListener(evento -> eliminar());
+        botonLimpiar.addActionListener(evento -> limpiar());
+        botonActualizar.addActionListener(evento -> cargarDatos());
 
         cargarDatos();
     }
 
     private void cargarDatos() {
+
         try {
+            List<Categoria> categoriasConsultadas =
+                    controlador.listarCategorias();
+
+            List<Libro> librosConsultados =
+                    controlador.listar();
+
             categorias.clear();
-            categorias.addAll(controlador.listarCategorias());
+            categorias.addAll(categoriasConsultadas);
 
             comboCategoria.removeAllItems();
 
@@ -155,7 +167,7 @@ public class VentanaLibros extends JFrame {
 
             modeloTabla.setRowCount(0);
 
-            for (Libro libro : controlador.listar()) {
+            for (Libro libro : librosConsultados) {
                 modeloTabla.addRow(new Object[]{
                         libro.getId(),
                         libro.getTitulo(),
@@ -168,11 +180,12 @@ public class VentanaLibros extends JFrame {
             }
 
         } catch (SQLException e) {
-            mostrarError(e.getMessage());
+            mostrarErrorBaseDatos("cargar los libros", e);
         }
     }
 
     private String obtenerNombreCategoria(int idCategoria) {
+
         for (Categoria categoria : categorias) {
             if (categoria.getId() == idCategoria) {
                 return categoria.getNombre();
@@ -183,6 +196,7 @@ public class VentanaLibros extends JFrame {
     }
 
     private void seleccionarLibro() {
+
         int id = obtenerIdSeleccionado();
 
         if (id == -1) {
@@ -193,7 +207,8 @@ public class VentanaLibros extends JFrame {
             Libro libro = controlador.buscarPorId(id);
 
             if (libro == null) {
-                mostrarError("El libro ya no existe.");
+                mostrarAviso("El libro seleccionado ya no existe.");
+                cargarDatos();
                 return;
             }
 
@@ -204,6 +219,7 @@ public class VentanaLibros extends JFrame {
             campoStock.setValue(libro.getStock());
 
             for (int i = 0; i < categorias.size(); i++) {
+
                 if (categorias.get(i).getId() ==
                         libro.getIdCategoria()) {
 
@@ -213,11 +229,12 @@ public class VentanaLibros extends JFrame {
             }
 
         } catch (SQLException e) {
-            mostrarError(e.getMessage());
+            mostrarErrorBaseDatos("consultar el libro", e);
         }
     }
 
     private int obtenerIdCategoria() {
+
         int indice = comboCategoria.getSelectedIndex();
 
         if (indice < 0 || indice >= categorias.size()) {
@@ -230,8 +247,10 @@ public class VentanaLibros extends JFrame {
     }
 
     private int obtenerStock() {
+
         try {
             campoStock.commitEdit();
+
         } catch (ParseException e) {
             throw new IllegalArgumentException(
                     "Debes ingresar un stock válido."
@@ -242,6 +261,7 @@ public class VentanaLibros extends JFrame {
     }
 
     private void guardar() {
+
         try {
             controlador.guardar(
                     campoTitulo.getText(),
@@ -252,24 +272,28 @@ public class VentanaLibros extends JFrame {
                     obtenerIdCategoria()
             );
 
-            JOptionPane.showMessageDialog(
-                    this, "Libro registrado correctamente."
-            );
+            mostrarExito("Libro registrado correctamente.");
 
             cargarDatos();
             limpiar();
 
-        } catch (SQLException | IllegalArgumentException |
-                 SecurityException e) {
-            mostrarError(e.getMessage());
+        } catch (SQLException e) {
+            manejarErrorGuardarOModificar(
+                    "registrar el libro",
+                    e
+            );
+
+        } catch (IllegalArgumentException | SecurityException e) {
+            mostrarAviso(e.getMessage());
         }
     }
 
     private void modificar() {
+
         int id = obtenerIdSeleccionado();
 
         if (id == -1) {
-            mostrarError("Selecciona un libro.");
+            mostrarAviso("Debes seleccionar un libro.");
             return;
         }
 
@@ -285,27 +309,58 @@ public class VentanaLibros extends JFrame {
             );
 
             if (actualizado) {
-                JOptionPane.showMessageDialog(
-                        this, "Libro modificado correctamente."
-                );
+
+                mostrarExito("Libro modificado correctamente.");
 
                 cargarDatos();
                 limpiar();
+
             } else {
-                mostrarError("El libro ya no existe.");
+
+                mostrarAviso("El libro seleccionado ya no existe.");
+                cargarDatos();
             }
 
-        } catch (SQLException | IllegalArgumentException |
-                 SecurityException e) {
-            mostrarError(e.getMessage());
+        } catch (SQLException e) {
+            manejarErrorGuardarOModificar(
+                    "modificar el libro",
+                    e
+            );
+
+        } catch (IllegalArgumentException | SecurityException e) {
+            mostrarAviso(e.getMessage());
+        }
+    }
+
+    private void manejarErrorGuardarOModificar(
+            String operacion,
+            SQLException excepcion
+    ) {
+
+        if (excepcion.getErrorCode() == 1062) {
+
+            LOGGER.log(
+                    Level.WARNING,
+                    "No se pudo completar la operación porque existe un dato duplicado.",
+                    excepcion
+            );
+
+            mostrarAviso(
+                    "Ya existe un libro con un dato que debe ser único, " +
+                            "como el ISBN. Revisa la información ingresada."
+            );
+
+        } else {
+            mostrarErrorBaseDatos(operacion, excepcion);
         }
     }
 
     private void eliminar() {
+
         int id = obtenerIdSeleccionado();
 
         if (id == -1) {
-            mostrarError("Selecciona un libro.");
+            mostrarAviso("Debes seleccionar un libro.");
             return;
         }
 
@@ -313,7 +368,8 @@ public class VentanaLibros extends JFrame {
                 this,
                 "¿Deseas eliminar este libro?",
                 "Confirmar eliminación",
-                JOptionPane.YES_NO_OPTION
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE
         );
 
         if (respuesta != JOptionPane.YES_OPTION) {
@@ -322,26 +378,44 @@ public class VentanaLibros extends JFrame {
 
         try {
             if (controlador.eliminar(id)) {
-                JOptionPane.showMessageDialog(
-                        this, "Libro eliminado correctamente."
-                );
+
+                mostrarExito("Libro eliminado correctamente.");
 
                 cargarDatos();
                 limpiar();
+
             } else {
-                mostrarError("El libro ya no existe.");
+
+                mostrarAviso("El libro seleccionado ya no existe.");
+                cargarDatos();
             }
 
-        } catch (SQLException | SecurityException e) {
-            mostrarError(
-                    "No se pudo eliminar el libro. " +
-                            "Puede tener préstamos asociados.\n" +
-                            e.getMessage()
-            );
+        } catch (SQLException e) {
+
+            if (e.getErrorCode() == 1451) {
+
+                LOGGER.log(
+                        Level.WARNING,
+                        "No se pudo eliminar el libro por una relación existente.",
+                        e
+                );
+
+                mostrarAviso(
+                        "No se puede eliminar el libro porque tiene " +
+                                "préstamos u otros registros asociados."
+                );
+
+            } else {
+                mostrarErrorBaseDatos("eliminar el libro", e);
+            }
+
+        } catch (SecurityException e) {
+            mostrarAviso(e.getMessage());
         }
     }
 
     private int obtenerIdSeleccionado() {
+
         int fila = tabla.getSelectedRow();
 
         if (fila == -1) {
@@ -354,7 +428,9 @@ public class VentanaLibros extends JFrame {
     }
 
     private void limpiar() {
+
         tabla.clearSelection();
+
         campoTitulo.setText("");
         campoAutor.setText("");
         campoIsbn.setText("");
@@ -368,12 +444,44 @@ public class VentanaLibros extends JFrame {
         campoTitulo.requestFocusInWindow();
     }
 
-    private void mostrarError(String mensaje) {
+    private void mostrarExito(String mensaje) {
+
+        JOptionPane.showMessageDialog(
+                this,
+                mensaje,
+                "Operación exitosa",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
+    private void mostrarAviso(String mensaje) {
+
         JOptionPane.showMessageDialog(
                 this,
                 mensaje,
                 "Aviso",
                 JOptionPane.WARNING_MESSAGE
+        );
+    }
+
+    private void mostrarErrorBaseDatos(
+            String operacion,
+            SQLException excepcion
+    ) {
+
+        LOGGER.log(
+                Level.SEVERE,
+                "Error de base de datos al intentar " + operacion,
+                excepcion
+        );
+
+        JOptionPane.showMessageDialog(
+                this,
+                "No se pudo " + operacion + ".\n" +
+                        "Comprueba la conexión con MySQL y " +
+                        "las restricciones de la base de datos.",
+                "Error de base de datos",
+                JOptionPane.ERROR_MESSAGE
         );
     }
 }

@@ -9,8 +9,14 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class VentanaCategorias extends JFrame {
+
+    private static final Logger LOGGER =
+            Logger.getLogger(VentanaCategorias.class.getName());
 
     private final ControladorCategoria controlador;
     private final JTextField campoNombre = new JTextField(20);
@@ -36,19 +42,22 @@ public class VentanaCategorias extends JFrame {
         setLocationRelativeTo(null);
 
         JPanel panel = new JPanel(new BorderLayout(10, 10));
-        panel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+        panel.setBorder(
+                BorderFactory.createEmptyBorder(15, 15, 15, 15)
+        );
 
         JLabel titulo = new JLabel(
                 "GESTIÓN DE CATEGORÍAS",
                 SwingConstants.CENTER
         );
+
         titulo.setFont(new Font("Arial", Font.BOLD, 20));
 
         tabla.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         tabla.setAutoCreateRowSorter(true);
 
-        tabla.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
+        tabla.getSelectionModel().addListSelectionListener(evento -> {
+            if (!evento.getValueIsAdjusting()) {
                 seleccionarCategoria();
             }
         });
@@ -80,20 +89,23 @@ public class VentanaCategorias extends JFrame {
 
         add(panel);
 
-        botonGuardar.addActionListener(_ -> guardar());
-        botonModificar.addActionListener(_ -> modificar());
-        botonEliminar.addActionListener(_ -> eliminar());
-        botonLimpiar.addActionListener(_ -> limpiar());
-        botonActualizar.addActionListener(_ -> cargarCategorias());
+        botonGuardar.addActionListener(evento -> guardar());
+        botonModificar.addActionListener(evento -> modificar());
+        botonEliminar.addActionListener(evento -> eliminar());
+        botonLimpiar.addActionListener(evento -> limpiar());
+        botonActualizar.addActionListener(evento -> cargarCategorias());
 
         cargarCategorias();
     }
 
     private void cargarCategorias() {
+
         try {
+            List<Categoria> categorias = controlador.listar();
+
             modeloTabla.setRowCount(0);
 
-            for (Categoria categoria : controlador.listar()) {
+            for (Categoria categoria : categorias) {
                 modeloTabla.addRow(new Object[]{
                         categoria.getId(),
                         categoria.getNombre()
@@ -101,14 +113,16 @@ public class VentanaCategorias extends JFrame {
             }
 
         } catch (SQLException e) {
-            mostrarError(e.getMessage());
+            mostrarErrorBaseDatos("cargar las categorías", e);
         }
     }
 
     private void seleccionarCategoria() {
+
         int fila = tabla.getSelectedRow();
 
         if (fila >= 0) {
+
             int filaModelo = tabla.convertRowIndexToModel(fila);
             int id = (int) modeloTabla.getValueAt(filaModelo, 0);
 
@@ -117,62 +131,73 @@ public class VentanaCategorias extends JFrame {
 
                 if (categoria != null) {
                     campoNombre.setText(categoria.getNombre());
+                } else {
+                    mostrarAviso(
+                            "La categoría seleccionada ya no existe."
+                    );
+                    cargarCategorias();
                 }
 
             } catch (SQLException e) {
-                mostrarError(e.getMessage());
+                mostrarErrorBaseDatos("consultar la categoría", e);
             }
         }
     }
 
     private void guardar() {
+
         try {
             controlador.guardar(campoNombre.getText());
 
-            JOptionPane.showMessageDialog(
-                    this, "Categoría registrada correctamente."
-            );
+            mostrarExito("Categoría registrada correctamente.");
 
             cargarCategorias();
             limpiar();
 
-        } catch (SQLException | IllegalArgumentException |
-                 SecurityException e) {
-            mostrarError(e.getMessage());
+        } catch (SQLException e) {
+            mostrarErrorBaseDatos("registrar la categoría", e);
+
+        } catch (IllegalArgumentException | SecurityException e) {
+            mostrarAviso(e.getMessage());
         }
     }
 
     private void modificar() {
+
         int id = obtenerIdSeleccionado();
 
         if (id == -1) {
-            mostrarError("Selecciona una categoría.");
+            mostrarAviso("Debes seleccionar una categoría.");
             return;
         }
 
         try {
             if (controlador.actualizar(id, campoNombre.getText())) {
-                JOptionPane.showMessageDialog(
-                        this, "Categoría modificada correctamente."
-                );
+
+                mostrarExito("Categoría modificada correctamente.");
 
                 cargarCategorias();
                 limpiar();
+
             } else {
-                mostrarError("La categoría ya no existe.");
+                mostrarAviso("La categoría seleccionada ya no existe.");
+                cargarCategorias();
             }
 
-        } catch (SQLException | IllegalArgumentException |
-                 SecurityException e) {
-            mostrarError(e.getMessage());
+        } catch (SQLException e) {
+            mostrarErrorBaseDatos("modificar la categoría", e);
+
+        } catch (IllegalArgumentException | SecurityException e) {
+            mostrarAviso(e.getMessage());
         }
     }
 
     private void eliminar() {
+
         int id = obtenerIdSeleccionado();
 
         if (id == -1) {
-            mostrarError("Selecciona una categoría.");
+            mostrarAviso("Debes seleccionar una categoría.");
             return;
         }
 
@@ -180,7 +205,8 @@ public class VentanaCategorias extends JFrame {
                 this,
                 "¿Deseas eliminar esta categoría?",
                 "Confirmar eliminación",
-                JOptionPane.YES_NO_OPTION
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE
         );
 
         if (respuesta != JOptionPane.YES_OPTION) {
@@ -189,25 +215,45 @@ public class VentanaCategorias extends JFrame {
 
         try {
             if (controlador.eliminar(id)) {
-                JOptionPane.showMessageDialog(
-                        this, "Categoría eliminada correctamente."
-                );
+
+                mostrarExito("Categoría eliminada correctamente.");
 
                 cargarCategorias();
                 limpiar();
+
             } else {
-                mostrarError("La categoría ya no existe.");
+                mostrarAviso("La categoría seleccionada ya no existe.");
+                cargarCategorias();
             }
 
-        } catch (SQLException | SecurityException e) {
-            mostrarError(
-                    "No se pudo eliminar la categoría. " +
-                            "Puede tener libros asociados.\n" + e.getMessage()
-            );
+        } catch (SQLException e) {
+
+            String estadoSQL = e.getSQLState();
+
+            if (estadoSQL != null && estadoSQL.startsWith("23")) {
+
+                LOGGER.log(
+                        Level.WARNING,
+                        "No se pudo eliminar la categoría por una restricción de integridad.",
+                        e
+                );
+
+                mostrarAviso(
+                        "No se puede eliminar la categoría porque " +
+                                "tiene registros asociados, como libros."
+                );
+
+            } else {
+                mostrarErrorBaseDatos("eliminar la categoría", e);
+            }
+
+        } catch (SecurityException e) {
+            mostrarAviso(e.getMessage());
         }
     }
 
     private int obtenerIdSeleccionado() {
+
         int fila = tabla.getSelectedRow();
 
         if (fila == -1) {
@@ -215,21 +261,55 @@ public class VentanaCategorias extends JFrame {
         }
 
         int filaModelo = tabla.convertRowIndexToModel(fila);
+
         return (int) modeloTabla.getValueAt(filaModelo, 0);
     }
 
     private void limpiar() {
+
         tabla.clearSelection();
         campoNombre.setText("");
         campoNombre.requestFocusInWindow();
     }
 
-    private void mostrarError(String mensaje) {
+    private void mostrarExito(String mensaje) {
+
+        JOptionPane.showMessageDialog(
+                this,
+                mensaje,
+                "Operación exitosa",
+                JOptionPane.INFORMATION_MESSAGE
+        );
+    }
+
+    private void mostrarAviso(String mensaje) {
+
         JOptionPane.showMessageDialog(
                 this,
                 mensaje,
                 "Aviso",
                 JOptionPane.WARNING_MESSAGE
+        );
+    }
+
+    private void mostrarErrorBaseDatos(
+            String operacion,
+            SQLException excepcion
+    ) {
+
+        LOGGER.log(
+                Level.SEVERE,
+                "Error de base de datos al intentar " + operacion,
+                excepcion
+        );
+
+        JOptionPane.showMessageDialog(
+                this,
+                "No se pudo " + operacion + ".\n" +
+                        "Comprueba la conexión con MySQL y " +
+                        "las restricciones de la base de datos.",
+                "Error de base de datos",
+                JOptionPane.ERROR_MESSAGE
         );
     }
 }
